@@ -1,4 +1,6 @@
-import socket, sys, fcntl, ctypes
+#! /usr/bin/env python3
+
+import socket, sys, fcntl, ctypes, datetime
 from struct import *
 
 class ifreq(ctypes.Structure):
@@ -10,6 +12,8 @@ def eth_addr(a):
     return(b)
 
 def MACpacket():
+    unique = set()
+    MaT = []
     s = socket.socket( socket.AF_PACKET , socket.SOCK_RAW , socket.ntohs(0x0003))
     s.bind(('wlp7s1',0))
     IFF_PROMISC = 0x100
@@ -37,7 +41,31 @@ def MACpacket():
             print ('dAdd: ' + d_addr + ' \t MAC : ' + eth_addr(packet[0:6]))
             print('sAdd: ' + s_addr +  '\t MAC : ' + eth_addr(packet[6:12])
                   + '\n')
+            unique, MaT = interpret(s_addr, eth_addr(packet[6:12]),
+                                    unique, MaT)
+            unique, MaT = interpret(d_addr, eth_addr(packet[0:6]),
+                                    unique, MaT)
+            print(MaT)
 
+
+def interpret(address, MAC, uniqueNetMACs, MACandTime):
+    length = len(uniqueNetMACs)
+    networkAdd = (list(address))
+    netbuild = networkAdd[0] + networkAdd[1] + networkAdd[2]
+    if (netbuild == '192'):
+        uniqueNetMACs.add(MAC)
+        if( len(uniqueNetMACs) > length):
+            t =  datetime.datetime.now().time()
+            MACandTime.append((MAC, str(t)[:7] ) )
+            
+    return uniqueNetMACs, MACandTime
+    
+        
+##(time.asctime(time.localtime
+##                                                  (time.time(tm_hour))))))        
+
+
+    
     
 
 
@@ -45,4 +73,11 @@ def MACpacket():
 def main():
     MACpacket()
 main()
+
+#@atexit.register
+#def exit():
+#    ifr = ifreq()
+#    ifr.ifr_ifrn = b'wlp7s1'
+#    ifr.ifr_flags &= ~IFF_PROMISC
+#    fcntl.ioctl(s.fileno(), SIOCSIFFLAGS, ifr)
 
