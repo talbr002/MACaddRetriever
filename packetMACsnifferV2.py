@@ -1,7 +1,13 @@
 #! /usr/bin/env python3
 
-import socket, sys, fcntl, ctypes, datetime
+import socket, sys, fcntl, ctypes, datetime, time
 from struct import *
+INCREMENT_CHECK = 3
+unique = set()
+MaT = []
+TimeFlag = time.localtime()[4]
+RUNTIME_FLAG = 0
+runtime = 0
 
 class ifreq(ctypes.Structure):
     _fields_ = [("ifr_ifrn", ctypes.c_char * 16),
@@ -12,8 +18,12 @@ def eth_addr(a):
     return(b)
 
 def MACpacket():
-    unique = set()
-    MaT = []
+    global unique
+    global MaT
+##    unique = set()
+##    MaT = []
+    unique_check = set()
+    MaT_check = []
     s = socket.socket( socket.AF_PACKET , socket.SOCK_RAW , socket.ntohs(0x0003))
     s.bind(('wlp7s1',0))
     IFF_PROMISC = 0x100
@@ -45,7 +55,10 @@ def MACpacket():
                                     unique, MaT)
             unique, MaT = interpret(d_addr, eth_addr(packet[0:6]),
                                     unique, MaT)
+            unique_check, MaT_check = checker(s_addr, eth_addr(packet[6:12]),
+                                              unique_check, MaT_check)
             print(MaT)
+            print('\n', MaT_check)
 
 
 def interpret(address, MAC, uniqueNetMACs, MACandTime):
@@ -59,10 +72,38 @@ def interpret(address, MAC, uniqueNetMACs, MACandTime):
             MACandTime.append((MAC, str(t)[:7] ) )
             
     return uniqueNetMACs, MACandTime
-    
+
+#This function is for checking to see if a users MAC address is still in the area.
+#It will use the value of INCREMENT_CHECK as the interval of minutes that it will
+#Check for the user.
+#currently incomplete
+def checker(address, MAC, unique_check, MaT_check):
+    global INCREMENT_CHECK
+    global TimeFlag
+    global RUNTIME_FLAG
+    global runtime
+    if (TimeFlag + INCREMENT_CHECK > 60):
+        TimeFlag = ((TimeFlag + INCREMENT_CHECK) - 60)
+
+    #time.localtime()[4] grabs the current minutes 
+    if((TimeFlag + INCREMENT_CHECK) <= time.localtime()[4]):
+        if(RUNTIME_FLAG == 0):
+            RUNTIME_FLAG = 1
+            runtime = ((time.localtime()[4]) + INCREMENT_CHECK)
+
+        unique_check, MaT_check = interpret(address, MAC, unique_check, MaT_check)
         
-##(time.asctime(time.localtime
-##                                                  (time.time(tm_hour))))))        
+        if(time.localtime()[4] >= runtime ):
+            TimeFlag = runtime
+            runtime = -1
+            RUNTIME_FLAG = 0
+            #This is where it needs to check orginal MaT list with new MaT list(must add)
+            unique_check = set()
+            MaT_check = [] 
+        
+    return unique_check, MaT_check
+        
+    
 
 
     
