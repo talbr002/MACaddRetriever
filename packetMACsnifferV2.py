@@ -2,12 +2,8 @@
 
 import socket, sys, fcntl, ctypes, datetime, time
 from struct import *
-INCREMENT_CHECK = 3
-unique = set()
-MaT = []
-TimeFlag = time.localtime()[4]
-RUNTIME_FLAG = 0
-runtime = 0
+startTimeDict = {}
+lastSeenDict = {}
 
 class ifreq(ctypes.Structure):
     _fields_ = [("ifr_ifrn", ctypes.c_char * 16),
@@ -18,12 +14,6 @@ def eth_addr(a):
     return(b)
 
 def MACpacket():
-    global unique
-    global MaT
-##    unique = set()
-##    MaT = []
-    unique_check = set()
-    MaT_check = []
     s = socket.socket( socket.AF_PACKET , socket.SOCK_RAW , socket.ntohs(0x0003))
     s.bind(('wlp7s1',0))
     IFF_PROMISC = 0x100
@@ -41,8 +31,6 @@ def MACpacket():
         eth_header = packet[:eth_length]
         eth = unpack('!6s6sH' , eth_header)
         eth_protocol = socket.ntohs(eth[2])
-        #print('DestMAC : ' + eth_addr(packet[0:6]) + ' Source MAC : '
-        #      + eth_addr(packet[6:12]) + ' Protocol : ' + str(eth_protocol))
         if eth_protocol == 8:
             ip_header = packet[eth_length:20+eth_length]
             iph = unpack('!BBHHHBBH4s4s' , ip_header)
@@ -51,63 +39,57 @@ def MACpacket():
             print ('dAdd: ' + d_addr + ' \t MAC : ' + eth_addr(packet[0:6]))
             print('sAdd: ' + s_addr +  '\t MAC : ' + eth_addr(packet[6:12])
                   + '\n')
-            unique, MaT = interpret(s_addr, eth_addr(packet[6:12]),
-                                    unique, MaT)
-            unique, MaT = interpret(d_addr, eth_addr(packet[0:6]),
-                                    unique, MaT)
-            unique_check, MaT_check = checker(s_addr, eth_addr(packet[6:12]),
-                                              unique_check, MaT_check)
-            print(MaT)
-            print('\n', MaT_check)
+            interpret(s_addr, eth_addr(packet[6:12]))
+            interpret(d_addr, eth_addr(packet[0:6]))
+            print(startTimeDict)
+            
+            update(s_addr, eth_addr(packet[6:12]))
+            update(d_addr, eth_addr(packet[0:6]))
+            print(lastSeenDict)
+            
 
 
-def interpret(address, MAC, uniqueNetMACs, MACandTime):
-    length = len(uniqueNetMACs)
+#interpret keeps track of the FIRST time a MAC address was seen
+def interpret(address, MAC ):
+    global startTimeDict
     networkAdd = (list(address))
     netbuild = networkAdd[0] + networkAdd[1] + networkAdd[2]
     if (netbuild == '192'):
-        uniqueNetMACs.add(MAC)
-        if( len(uniqueNetMACs) > length):
+        if MAC  not in startTimeDict:
             t =  datetime.datetime.now().time()
-            MACandTime.append((MAC, str(t)[:7] ) )
+            startTimeDict[MAC] = (str(t)[:7])
             
-    return uniqueNetMACs, MACandTime
 
-#This function is for checking to see if a users MAC address is still in the area.
-#It will use the value of INCREMENT_CHECK as the interval of minutes that it will
-#Check for the user.
-#currently incomplete
-def checker(address, MAC, unique_check, MaT_check):
-    global INCREMENT_CHECK
-    global TimeFlag
-    global RUNTIME_FLAG
-    global runtime
-    if (TimeFlag + INCREMENT_CHECK > 60):
-        TimeFlag = ((TimeFlag + INCREMENT_CHECK) - 60)
+#update keeps track of the LAST time a MAC address was seen
+def update(address, MAC):
+    global lastSeenDict
+    networkAdd = (list(address))
+    netbuild = networkAdd[0] + networkAdd[1] + networkAdd[2]
+    if (netbuild == '192'):
+            t =  datetime.datetime.now().time()
+            lastSeenDict[MAC] = (str(t)[:7])
+            checker(MAC)
 
-    #time.localtime()[4] grabs the current minutes 
-    if((TimeFlag + INCREMENT_CHECK) <= time.localtime()[4]):
-        if(RUNTIME_FLAG == 0):
-            RUNTIME_FLAG = 1
-            runtime = ((time.localtime()[4]) + INCREMENT_CHECK)
-
-        unique_check, MaT_check = interpret(address, MAC, unique_check, MaT_check)
-        
-        if(time.localtime()[4] >= runtime ):
-            TimeFlag = runtime
-            runtime = -1
-            RUNTIME_FLAG = 0
-            #This is where it needs to check orginal MaT list with new MaT list(must add)
-            unique_check = set()
-            MaT_check = [] 
-        
-    return unique_check, MaT_check
-        
+#checker is used to check to see if a MAC address was seen in the last 10 mins
+#If it wasn't then it removes it from the StartTimeDict
+def checker(MAC):
+    global startTimeDict
+    global lastSeenDict
+    startHour = int(startTimeDict[MAC].split(':', 2)[0])
+    startMinute = int(startTimeDict[MAC].split(':', 2)[1])
+    recentHour = int(lastSeenDict[MAC].split(':', 2)[0])
+    recentMinute = int(lastSeenDict[MAC].split(':', 2)[1])
+    if(startHour == recentHour):
+        if((recentMinute - startMinute) > 10):
+            del startTimeDict[MAC]
+    else:
+        recentMinute += 60
+        if((recentMinute - startMinute) > 10):
+            del startTimeDict[MAC]
+            
+            
     
 
-
-    
-    
 
 
 
